@@ -1,0 +1,81 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tesseract (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install tesseract -y --no-progress
+          echo "C:\\Program Files\\Tesseract-OCR" >> "$GITHUB_PATH"
+
+      - name: Install Tesseract (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tesseract
+
+      - name: Install Tesseract + Tk (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr python3-tk xvfb
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+
+      - name: End-to-end tests
+        run: python -m pytest -q tests
+
+      - name: Build single-file app
+        run: python packaging/build.py
+
+      - name: Smoke-test the packaged app (headless scan, bundled OCR)
+        run: |
+          python tests/make_fixtures.py "$RUNNER_TEMP/fx"
+          OUT="$RUNNER_TEMP/smoke_report.html"
+          case "$RUNNER_OS" in
+            Windows)
+              # --noconsole build: start it and wait for it to exit
+              powershell -Command "Start-Process -Wait -FilePath 'dist\declutter.exe' -ArgumentList '--scan','$(cygpath -w "$RUNNER_TEMP/fx")','--out','$(cygpath -w "$OUT")','--quiet'" ;;
+            macOS)
+              dist/declutter.app/Contents/MacOS/declutter --scan "$RUNNER_TEMP/fx" --out "$OUT" --quiet ;;
+            Linux)
+              dist/declutter --scan "$RUNNER_TEMP/fx" --out "$OUT" --quiet ;;
+          esac
+          test -f "$OUT"
+          grep -q "OCR: bundled Tesseract" "$OUT"
+          grep -q 'value="receipt" selected' "$OUT"
+          echo "packaged app OK"
+
+      - name: Package artifact
+        run: |
+          mkdir -p upload
+          case "$RUNNER_OS" in
+            Windows) cp dist/declutter.exe upload/ ;;
+            macOS)   ditto -c -k --keepParent dist/declutter.app upload/declutter-macos.zip ;;
+            Linux)   cp dist/declutter upload/declutter-linux ;;
+          esac
+          cp README.md upload/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: declutter-${{ runner.os }}
+          path: upload/

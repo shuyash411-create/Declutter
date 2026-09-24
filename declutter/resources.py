@@ -3,6 +3,7 @@
 import os
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 _PKG_DIR = Path(__file__).resolve().parent
@@ -39,6 +40,7 @@ def _candidate_tesseract_dirs():
 
 
 _TESSERACT_CACHE = {"resolved": False, "cmd": None, "bundled": False}
+_TESSERACT_LOCK = threading.Lock()
 
 
 def configure_tesseract():
@@ -46,8 +48,13 @@ def configure_tesseract():
 
     Returns (command_path or None, is_bundled).
     """
-    if _TESSERACT_CACHE["resolved"]:
-        return _TESSERACT_CACHE["cmd"], _TESSERACT_CACHE["bundled"]
+    with _TESSERACT_LOCK:
+        if not _TESSERACT_CACHE["resolved"]:
+            _resolve_tesseract()
+    return _TESSERACT_CACHE["cmd"], _TESSERACT_CACHE["bundled"]
+
+
+def _resolve_tesseract():
 
     # Several Tesseract processes run at once (one per worker thread); stop each
     # from also spawning an OpenMP thread per core, which is ~30x slower overall.
@@ -98,4 +105,3 @@ def configure_tesseract():
             cmd = None
 
     _TESSERACT_CACHE.update(resolved=True, cmd=cmd, bundled=bundled and cmd is not None)
-    return cmd, _TESSERACT_CACHE["bundled"]
