@@ -344,9 +344,20 @@ def analyze_image(ff, use_ocr=True):
     try:
         rec["sha256"] = _sha256(ff.path)
         with Image.open(ff.path) as im:
-            im.load()
+            full_w, full_h = im.size
             has_cam, camera = _camera_exif(im)
+            try:
+                orientation = im.getexif().get(0x0112, 1)
+            except Exception:
+                orientation = 1
+            if im.format == "JPEG":
+                # decode big camera JPEGs at 1/2..1/8 scale: far faster, and every
+                # analysis step works on <= 1600px anyway
+                im.draft("RGB", (1600, 1600))
+            im.load()
             im = ImageOps.exif_transpose(im)
+            if orientation in (5, 6, 7, 8):
+                full_w, full_h = full_h, full_w
             if im.mode not in ("RGB", "L"):
                 bg = Image.new("RGB", im.size, (255, 255, 255))
                 rgba = im.convert("RGBA")
@@ -354,7 +365,7 @@ def analyze_image(ff, use_ocr=True):
                 im = bg
             else:
                 im = im.convert("RGB")
-        w, h = im.size
+        w, h = full_w, full_h  # real resolution, even if decoded smaller
         rec.update(width=w, height=h, camera=camera, has_camera_exif=has_cam)
         rec["thumb"] = _thumb_b64(im)
         rec["phash"] = int(str(imagehash.phash(im)), 16)

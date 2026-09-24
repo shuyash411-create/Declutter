@@ -121,7 +121,10 @@ def _doc_row(r, i):
 def _group_by_category(recs, categories):
     """category -> list of blocks; a block is either ('group', [ids]) or ('single', id)."""
     out = {k: [] for k in categories}
-    seen_groups = set()
+    seen_groups, by_group = set(), {}
+    for i, r in recs:
+        if r.get("dup_group"):
+            by_group.setdefault(r["dup_group"], []).append((i, r))
     for i, r in recs:
         g = r.get("dup_group")
         cat = r["category"] if r["category"] in out else list(out)[-1]
@@ -129,7 +132,7 @@ def _group_by_category(recs, categories):
             if g in seen_groups:
                 continue
             seen_groups.add(g)
-            members = [(j, x) for j, x in recs if x.get("dup_group") == g]
+            members = list(by_group[g])
             members.sort(key=lambda t: (not t[1].get("is_keeper"), t[1]["path"]))
             out[cat].append(("group", members))
         else:
