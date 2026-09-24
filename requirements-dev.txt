@@ -1,0 +1,5 @@
+-r requirements.txt
+pyinstaller>=6.3
+pytest>=8.0
+scikit-image>=0.22   # sample photos for tests/make_fixtures.py
+reportlab>=4.0       # PDFs for tests/make_fixtures.py

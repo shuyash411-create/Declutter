@@ -1,0 +1,10 @@
+# runtime
+pillow>=10.0
+imagehash>=4.3
+numpy>=1.24,<3
+# OpenCV 5 dropped the bundled Haar cascades; 4.x is required
+opencv-python-headless>=4.8,<5
+pytesseract>=0.3.10
+pypdf>=4.0
+python-docx>=1.1
+openpyxl>=3.1
